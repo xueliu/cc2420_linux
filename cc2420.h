@@ -1,4 +1,8 @@
 /*
+ * Driver for TI CC2420 802.15.4 Wireless-PAN Networking controller
+ *
+ * Copyright (C) 2018 Xue Liu <liuxuenetmail@gmail.com>
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2
  * as published by the Free Software Foundation.
@@ -8,13 +12,6 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
- *
- * Author:	Jonathan Cameron <jic23@cam.ac.uk>
- *
- * Modified 2010:	xue liu <liuxuenetmail@gmail.com>
  */
 
 #ifndef __CC2420_H
