@@ -56,6 +56,8 @@
 #define CC2420_MANFID 	0x033D
 #define CC2420_VERSION 	0x3
 
+#define	CC2420_FIFO_SIZE	128
+
 #define SPI_COMMAND_BUFFER	3
 #define	HIGH			1
 #define	LOW			0
@@ -99,6 +101,17 @@ struct cc2420_local {
 	spinlock_t lock;		/* Lock for is_tx*/
 	struct completion tx_complete;	/* Work completion for Tx */
 	bool promiscuous;               /* Flag for promiscuous mode */
+
+	int fifop_irq;
+
+	/* receive handling */
+	struct spi_message rxfifo_msg;
+	u8 rxfifo_addr[1];
+	struct spi_transfer rxfifo_xfer_addr;
+	u8 rxfifo_len[1];
+	struct spi_transfer rxfifo_xfer_len;
+	u8 rxfifo_buf[CC2420_FIFO_SIZE];
+	struct spi_transfer rxfifo_xfer_buf;
 };
 
 static bool
@@ -264,6 +277,34 @@ static int cc2420_cmd_strobe(struct cc2420_local *lp,
 	dev_dbg(&lp->spi->dev, "cmd strobe buf[0] = %02x\n", lp->buf[0]);
 
 	ret = spi_sync(lp->spi, &msg);
+	if (!ret)
+		status = lp->buf[0];
+	dev_dbg(&lp->spi->dev, "status = %02x\n", lp->buf[0]);
+	mutex_unlock(&lp->buffer_mutex);
+
+	return ret;
+}
+
+static int cc2420_async_cmd_strobe(struct cc2420_local *lp,
+				 u8 cmd)
+{
+	int ret;
+	u8 status = 0xf;
+	struct spi_message msg;
+	struct spi_transfer xfer = {
+		.len = 0,
+		.tx_buf = lp->buf,
+		.rx_buf = lp->buf,
+	};
+
+	spi_message_init(&msg);
+	spi_message_add_tail(&xfer, &msg);
+
+	mutex_lock(&lp->buffer_mutex);
+	lp->buf[xfer.len++] = CC2420_WRITEREG(cmd);
+	dev_dbg(&lp->spi->dev, "cmd strobe buf[0] = %02x\n", lp->buf[0]);
+
+	ret = spi_async(lp->spi, &msg);
 	if (!ret)
 		status = lp->buf[0];
 	dev_dbg(&lp->spi->dev, "status = %02x\n", lp->buf[0]);
@@ -546,42 +587,76 @@ err_rx:
 	return rc;
 }
 
-static int cc2420_rx(struct cc2420_local *lp)
+//static int cc2420_rx(struct cc2420_local *lp)
+//{
+//	u8 len = 128;
+//	u8 lqi = 0; /* link quality */
+//	u8 fcs = 0;
+//	int rc;
+//	struct sk_buff *skb;
+//
+//	skb = alloc_skb(len, GFP_KERNEL);
+//	if (!skb)
+//		return -ENOMEM;
+//
+//	rc = cc2420_read_rxfifo(lp, skb_put(skb, len), &len, &lqi);
+//	if (len < 2) {
+//		kfree_skb(skb);
+//		return -EINVAL;
+//	}
+//
+//	/* Check FCS flag */
+//	fcs = skb->data[len-1];
+//	if (!(fcs >> 7)) {
+//		dev_dbg(&lp->spi->dev, "Received packet with wrong FCS; ingnore.\n");
+//		kfree_skb(skb);
+//		return -EINVAL;
+//	}
+//
+//	/* Clip last two bytes. When using hardware FCS they get replaced with
+//	 * correlation value, FCS flag and RSSI value */
+//	skb_trim(skb, len-2);
+//
+//	ieee802154_rx_irqsafe(lp->hw, skb, lqi);
+//
+//	dev_dbg(&lp->spi->dev, "RXFIFO: %d %d %x\n", rc, len, lqi);
+//
+//	return 0;
+//}
+static void
+mcr20a_handle_read_rxfifo_complete(void *context)
 {
-	u8 len = 128;
-	u8 lqi = 0; /* link quality */
-	u8 fcs = 0;
-	int rc;
+	struct cc2420_local *lp = context;
 	struct sk_buff *skb;
+	u8 len = lp->rxfifo_len[0];
+	u8 lqi = lp->rxfifo_buf[len - 1] & 0x7f;
 
-	skb = alloc_skb(len, GFP_KERNEL);
+	dev_dbg(printdev(lp), "%s\n", __func__);
+
+	if (!ieee802154_is_valid_psdu_len(len)) {
+		dev_dbg(&lp->spi->dev, "corrupted frame received\n");
+		len = IEEE802154_MTU;
+	}
+
+	len = len - 2;  /* get rid of frame check field */
+
+	skb = dev_alloc_skb(len);
 	if (!skb)
-		return -ENOMEM;
+		return;
 
-	rc = cc2420_read_rxfifo(lp, skb_put(skb, len), &len, &lqi);
-	if (len < 2) {
-		kfree_skb(skb);
-		return -EINVAL;
-	}
-
-	/* Check FCS flag */
-	fcs = skb->data[len-1];
-	if (!(fcs >> 7)) {
-		dev_dbg(&lp->spi->dev, "Received packet with wrong FCS; ingnore.\n");
-		kfree_skb(skb);
-		return -EINVAL;
-	}
-
-	/* Clip last two bytes. When using hardware FCS they get replaced with
-	 * correlation value, FCS flag and RSSI value */
-	skb_trim(skb, len-2);
-
+	memcpy(skb_put(skb, len), lp->rxfifo_buf, len);
 	ieee802154_rx_irqsafe(lp->hw, skb, lqi);
 
-	dev_dbg(&lp->spi->dev, "RXFIFO: %d %d %x\n", rc, len, lqi);
-
-	return 0;
+#ifdef DEBUG
+	print_hex_dump(KERN_INFO, "cc2420 rxfifo: ", DUMP_PREFIX_OFFSET, 16, 1,
+		       lp->rxfifo_buf, len, 0);
+	pr_info("cc2420 rx: lqi: %02hhx\n", lqi);
+#endif
+	enable_irq(lp->fifop_irq);
+//	cc2420_async_cmd_strobe(lp, CC2420_SFLUSHRX);
+//	cc2420_cmd_strobe(lp, CC2420_SFLUSHRX);
 }
+
 
 static int cc2420_set_channel(struct ieee802154_hw *hw, u8 page, u8 channel)
 {
@@ -757,27 +832,36 @@ err_ret:
 static irqreturn_t cc2420_fifop_isr(int irq, void *data)
 {
 	struct cc2420_local *lp = data;
+	int ret;
 
-	schedule_work(&lp->fifop_irqwork);
+	disable_irq_nosync(irq);
+
+	lp->rxfifo_addr[0] = CC2420_READREG(CC2420_RXFIFO);
+	/* read rxfifo */
+	ret = spi_async(lp->spi, &lp->rxfifo_msg);
+	if (ret) {
+		enable_irq(irq);
+		return IRQ_NONE;
+	}
 
 	return IRQ_HANDLED;
 }
 
-static void cc2420_fifop_irqwork(struct work_struct *work)
-{
-	struct cc2420_local *lp
-		= container_of(work, struct cc2420_local, fifop_irqwork);
-
-	dev_dbg(&lp->spi->dev, "fifop interrupt received\n");
-
-	if (gpio_get_value(lp->fifo_pin))
-		cc2420_rx(lp);
-	else
-		dev_err(&lp->spi->dev, "rxfifo overflow\n");
-
-	cc2420_cmd_strobe(lp, CC2420_SFLUSHRX);
-	cc2420_cmd_strobe(lp, CC2420_SFLUSHRX);
-}
+//static void cc2420_fifop_irqwork(struct work_struct *work)
+//{
+//	struct cc2420_local *lp
+//		= container_of(work, struct cc2420_local, fifop_irqwork);
+//
+//	dev_dbg(&lp->spi->dev, "fifop interrupt received\n");
+//
+//	if (gpio_get_value(lp->fifo_pin))
+//		cc2420_rx(lp);
+//	else
+//		dev_err(&lp->spi->dev, "rxfifo overflow\n");
+//
+//	cc2420_cmd_strobe(lp, CC2420_SFLUSHRX);
+//	cc2420_cmd_strobe(lp, CC2420_SFLUSHRX);
+//}
 
 static irqreturn_t cc2420_sfd_isr(int irq, void *data)
 {
@@ -836,6 +920,28 @@ static int cc2420_get_platform_data(struct spi_device *spi,
 	dev_dbg(&spi->dev, "get reset-gpio: %d\n", pdata->reset);
 
 	return 0;
+}
+
+static void
+cc2420_setup_rx_spi_messages(struct cc2420_local *lp)
+{
+	spi_message_init(&lp->rxfifo_msg);
+	lp->rxfifo_msg.context = lp;
+	lp->rxfifo_msg.complete = mcr20a_handle_read_rxfifo_complete;
+
+	lp->rxfifo_xfer_addr.len = 1;
+	lp->rxfifo_xfer_addr.tx_buf = lp->rxfifo_addr;
+	lp->rxfifo_xfer_addr.rx_buf = lp->rxfifo_addr;
+
+	lp->rxfifo_xfer_len.len = 1;
+	lp->rxfifo_xfer_len.rx_buf = lp->rxfifo_len;
+
+	lp->rxfifo_xfer_buf.rx_buf = lp->rxfifo_buf;
+	lp->rxfifo_xfer_buf.len = CC2420_FIFO_SIZE;
+
+	spi_message_add_tail(&lp->rxfifo_xfer_addr, &lp->rxfifo_msg);
+	spi_message_add_tail(&lp->rxfifo_xfer_len, &lp->rxfifo_msg);
+	spi_message_add_tail(&lp->rxfifo_xfer_buf, &lp->rxfifo_msg);
 }
 
 static int cc2420_hw_init(struct cc2420_local *lp)
@@ -903,7 +1009,7 @@ static int cc2420_probe(struct spi_device *spi)
 		return -ENOMEM;
 
 	mutex_init(&lp->buffer_mutex);
-	INIT_WORK(&lp->fifop_irqwork, cc2420_fifop_irqwork);
+//	INIT_WORK(&lp->fifop_irqwork, cc2420_fifop_irqwork);
 	spin_lock_init(&lp->lock);
 	init_completion(&lp->tx_complete);
 
@@ -989,6 +1095,8 @@ static int cc2420_probe(struct spi_device *spi)
 		goto err_hw_init;
 	}
 
+	cc2420_setup_rx_spi_messages(lp);
+
 	/* Check this is actually a cc2420 */
 	ret = cc2420_read_subreg(lp, SR_MANFID, &manid);
 	if (ret)
@@ -1014,9 +1122,11 @@ static int cc2420_probe(struct spi_device *spi)
 	if (ret)
 		goto err_hw_init;
 
+	lp->fifop_irq = gpio_to_irq(pdata.fifop);
+
 	/* Set up fifop interrupt */
 	ret = devm_request_irq(&spi->dev,
-			       gpio_to_irq(pdata.fifop),
+			       lp->fifop_irq,
 			       cc2420_fifop_isr,
 			       IRQF_TRIGGER_RISING,
 			       dev_name(&spi->dev),
