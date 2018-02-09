@@ -46,7 +46,7 @@
 #define REG_READ_MSK	0x40
 #define REG_WRITE_MSK	0x0
 
-#define CC2420_FREQ_MASK 	0x3FF
+//#define CC2420_FREQ_MASK 	0x3FF
 #define CC2420_ADR_DECODE_MASK	0x0B00
 #define CC2420_FIFOP_THR_MASK	0x003F
 #define CC2420_CRC_MASK		0x80
@@ -128,7 +128,7 @@ cc2420_reg_writeable(struct device *dev, unsigned int reg)
 	case RG_TXCTRL:
 	case CC2420_RXCTRL0:
 	case CC2420_RXCTRL1:
-	case CC2420_FSCTRL:
+	case RG_FSCTRL:
 	case CC2420_SECCTRL0:
 	case CC2420_SECCTRL1:
 	case CC2420_BATTMON:
@@ -372,23 +372,6 @@ cc2420_write_subreg(struct cc2420_local *lp,
 	return ret;
 }
 
-static int cc2420_set_channel(struct ieee802154_hw *hw, u8 page, u8 channel)
-{
-	struct cc2420_local *lp = hw->priv;
-	int ret;
-
-	dev_dbg(printdev(lp), "%s\n", __func__);
-
-	BUG_ON(page != 0);
-	BUG_ON(channel < CC2420_MIN_CHANNEL);
-	BUG_ON(channel > CC2420_MAX_CHANNEL);
-
-	ret = cc2420_write_16_bit_reg_partial(lp, CC2420_FSCTRL, 
-					      357 + 5*(channel - 11), CC2420_FREQ_MASK);
-
-	return ret;
-}
-
 static int cc2420_write_ram(struct cc2420_local *lp, u16 addr, u8 len, u8 *data)
 {
 	int status;
@@ -600,9 +583,25 @@ static int cc2420_rx(struct cc2420_local *lp)
 	return 0;
 }
 
+static int cc2420_set_channel(struct ieee802154_hw *hw, u8 page, u8 channel)
+{
+	struct cc2420_local *lp = hw->priv;
+	unsigned int reg_value;
+
+	BUG_ON(page != 0);
+	BUG_ON(channel < CC2420_MIN_CHANNEL);
+	BUG_ON(channel > CC2420_MAX_CHANNEL);
+
+	reg_value= 357 + CC2520_CHANNEL_SPACING * (channel - 11);
+
+	dev_dbg(printdev(lp), "%s\n", __func__);
+
+	return cc2420_write_subreg(lp, SG_FREQ, reg_value);
+}
+
 static int
 cc2420_set_hw_addr_filt(struct ieee802154_hw *dev,
-			struct ieee802154_hw_addr_filt *filt, 
+			struct ieee802154_hw_addr_filt *filt,
 			unsigned long changed)
 {
 	struct cc2420_local *lp = dev->priv;
@@ -623,7 +622,7 @@ cc2420_set_hw_addr_filt(struct ieee802154_hw *dev,
 		u16 short_addr = le16_to_cpu(filt->short_addr);
 
 		dev_dbg(&lp->spi->dev, "%s called for saddr\n", __func__);
-		ret = cc2420_write_ram(lp, CC2420_RAM_SHORTADR, 
+		ret = cc2420_write_ram(lp, CC2420_RAM_SHORTADR,
 				       sizeof(short_addr),
 				       (u8 *)&short_addr);
 	}
@@ -632,7 +631,7 @@ cc2420_set_hw_addr_filt(struct ieee802154_hw *dev,
 		u16 panid = le16_to_cpu(filt->pan_id);
 
 		dev_dbg(&lp->spi->dev, "%s called for pan id\n", __func__);
-		ret = cc2420_write_ram(lp, CC2420_RAM_PANID, sizeof(panid), 
+		ret = cc2420_write_ram(lp, CC2420_RAM_PANID, sizeof(panid),
 				 (u8 *)&panid);
 	}
 
@@ -663,9 +662,12 @@ cc2420_set_txpower(struct ieee802154_hw *hw, s32 mbm)
 	struct cc2420_local *lp = hw->priv;
 	u32 i;
 
+	dev_dbg(printdev(lp), "%s\n", __func__);
+
 	for (i = 0; i < lp->hw->phy->supported.tx_powers_size; i++) {
-		if (lp->hw->phy->supported.tx_powers[i] == mbm)
+		if (lp->hw->phy->supported.tx_powers[i] == mbm) {
 			return cc2420_write_subreg(lp, SG_PA_LVL, 0x1f - 4 * i);
+		}
 	}
 
 	return -EINVAL;
@@ -738,7 +740,7 @@ static int cc2420_register(struct cc2420_local *lp)
 	lp->hw->phy->transmit_power = lp->hw->phy->supported.tx_powers[0];
 
 	lp->hw->phy->current_page = 0;
-	lp->hw->phy->current_channel = 11;
+	lp->hw->phy->current_channel = 20;
 
 	dev_dbg(&lp->spi->dev, "registered cc2420\n");
 	ret = ieee802154_register_hw(lp->hw);

@@ -25,10 +25,10 @@ struct cc2420_platform_data {
 	int vreg;   /* voltage regulator enable */
 };
 
-enum {
-  CC2420_MIN_CHANNEL =              11,
-  CC2420_MAX_CHANNEL =              26
-};
+
+#define CC2420_MIN_CHANNEL	11
+#define CC2420_MAX_CHANNEL	26
+#define CC2520_CHANNEL_SPACING	5
 
 /* Command strobes */
 #define CC2420_SNOP            0x00
@@ -57,7 +57,8 @@ enum {
 #define SG_PA_LVL		0x15, 0x001f, 0
 #define CC2420_RXCTRL0         0x16
 #define CC2420_RXCTRL1         0x17
-#define CC2420_FSCTRL          0x18
+#define RG_FSCTRL	(0x18)
+#define SG_FREQ			0x18, 0x3ff, 0
 #define CC2420_SECCTRL0        0x19
 #define CC2420_SECCTRL1        0x1A
 #define CC2420_BATTMON         0x1B
