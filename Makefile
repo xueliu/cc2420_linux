@@ -14,7 +14,7 @@ clean:
 
 else
 	obj-m := cc2420.o
-#	CFLAGS_cc2420.o := -DDEBUG
+	CFLAGS_cc2420.o := -DDEBUG -Wall
 endif
 
 remote_install:

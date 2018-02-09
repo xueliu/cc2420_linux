@@ -31,8 +31,8 @@ enum {
 };
 
 /* Command strobes */
-#define CC2420_SNOP            0x00 /* no op */
-#define CC2420_SXOSCON         0x01 /* Enable crystal oscillator */
+#define CC2420_SNOP            0x00
+#define CC2420_SXOSCON         0x01
 #define CC2420_STXCAL          0x02
 #define CC2420_SRXON           0x03
 #define CC2420_STXON           0x04
@@ -53,7 +53,8 @@ enum {
 #define CC2420_MDMCTRL1        0x12
 #define CC2420_RSSI            0x13
 #define CC2420_SYNCWORD        0x14
-#define CC2420_TXCTRL          0x15
+#define RG_TXCTRL	(0x15)
+#define SG_PA_LVL		0x15, 0x001f, 0
 #define CC2420_RXCTRL0         0x16
 #define CC2420_RXCTRL1         0x17
 #define CC2420_FSCTRL          0x18
@@ -62,8 +63,11 @@ enum {
 #define CC2420_BATTMON         0x1B
 #define CC2420_IOCFG0          0x1C
 #define CC2420_IOCFG1          0x1D
-#define CC2420_MANFIDL         0x1E /* manufacturer id low */
-#define CC2420_MANFIDH         0x1F /* manufacturer id high */
+#define RG_MANFIDL	(0x1e)
+#define	SR_MANFID		0x1e, 0x0fff, 0
+#define	SR_PARTNUM		0x1e, 0xf000, 12
+#define RG_MANFIDH	(0x1f)
+#define SR_VERSION		0x1f, 0xf000, 12
 #define CC2420_FSMTC           0x20
 #define CC2420_MANAND          0x21
 #define CC2420_MANOR           0x22

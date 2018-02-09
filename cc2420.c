@@ -36,12 +36,15 @@
 
 #define printdev(X) (&X->spi->dev)
 
-#define CC2420_WRITEREG(x) (x)
-#define CC2420_READREG(x) (0x40 | x)
-#define CC2420_RAMADDR(x) ((x & 0x7F) | 0x80)
-#define CC2420_RAMBANK(x) ((x >> 1) & 0xc0)
-#define CC2420_WRITERAM(x) (x)
-#define CC2420_READRAM(x) (0x20 | x)
+#define CC2420_WRITEREG(x)	(x)
+#define CC2420_READREG(x)	(0x40 | x)
+#define CC2420_RAMADDR(x)	((x & 0x7F) | 0x80)
+#define CC2420_RAMBANK(x)	((x >> 1) & 0xc0)
+#define CC2420_WRITERAM(x)	(x)
+#define CC2420_READRAM(x)	(0x20 | x)
+
+#define REG_READ_MSK	0x40
+#define REG_WRITE_MSK	0x0
 
 #define CC2420_FREQ_MASK 	0x3FF
 #define CC2420_ADR_DECODE_MASK	0x0B00
@@ -50,8 +53,8 @@
 #define CC2420_RSSI_MASK	0x7F
 #define CC2420_FSMSTATE_MASK	0x2F
 
-#define CC2420_MANFIDLOW 	0x233D
-#define CC2420_MANFIDHIGH 	0x3000
+#define CC2420_MANFID 	0x033D
+#define CC2420_VERSION 	0x3
 
 #define SPI_COMMAND_BUFFER	3
 #define	HIGH			1
@@ -85,6 +88,8 @@
 struct cc2420_local {
 	struct spi_device *spi;		/* SPI device structure */
 //	struct cc2420_platform_data *pdata;
+	struct regmap *regmap;
+
 	struct ieee802154_hw *hw;	/* IEEE-802.15.4 device */
 	u8 *buf;			/* SPI TX/Rx data buffer */
 	struct mutex buffer_mutex;	/* SPI buffer mutex */
@@ -94,6 +99,124 @@ struct cc2420_local {
 	spinlock_t lock;		/* Lock for is_tx*/
 	struct completion tx_complete;	/* Work completion for Tx */
 	bool promiscuous;               /* Flag for promiscuous mode */
+};
+
+static bool
+cc2420_reg_writeable(struct device *dev, unsigned int reg)
+{
+	switch (reg) {
+	case CC2420_SNOP:
+	case CC2420_SXOSCON:
+	case CC2420_STXCAL:
+	case CC2420_SRXON:
+	case CC2420_STXON:
+	case CC2420_STXONCCA:
+	case CC2420_SRFOFF:
+	case CC2420_SXOSCOFF:
+	case CC2420_SFLUSHRX:
+	case CC2420_SFLUSHTX:
+	case CC2420_SACK:
+	case CC2420_SACKPEND:
+	case CC2420_SRXDEC:
+	case CC2420_STXENC:
+	case CC2420_SAES:
+	case CC2420_MAIN:
+	case CC2420_MDMCTRL0:
+	case CC2420_MDMCTRL1:
+	case CC2420_RSSI:
+	case CC2420_SYNCWORD:
+	case RG_TXCTRL:
+	case CC2420_RXCTRL0:
+	case CC2420_RXCTRL1:
+	case CC2420_FSCTRL:
+	case CC2420_SECCTRL0:
+	case CC2420_SECCTRL1:
+	case CC2420_BATTMON:
+	case CC2420_IOCFG0:
+	case CC2420_IOCFG1:
+	case RG_MANFIDL:
+	case RG_MANFIDH:
+	case CC2420_FSMTC:
+	case CC2420_MANAND:
+	case CC2420_MANOR:
+	case CC2420_AGCCTRL:
+	case CC2420_AGCTST0:
+	case CC2420_AGCTST1:
+	case CC2420_AGCTST2:
+	case CC2420_FSTST0:
+	case CC2420_FSTST1:
+	case CC2420_FSTST2:
+	case CC2420_FSTST3:
+	case CC2420_RXBPFTST:
+	case CC2420_ADCTST:
+	case CC2420_DACTST:
+	case CC2420_TOPTST:
+	case CC2420_RESERVED:
+	case CC2420_TXFIFO: /* write only */
+	case CC2420_RXFIFO:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static bool
+cc2420_reg_readable(struct device *dev, unsigned int reg)
+{
+	bool rc;
+
+	/* all writeable are also readable */
+	rc = cc2420_reg_writeable(dev, reg);
+	if (rc)
+		return rc;
+
+	/* readonly regs */
+	switch (reg) {
+	case CC2420_FSMSTATE:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static bool
+cc2420_reg_volatile(struct device *dev, unsigned int reg)
+{
+	/* can be changed during runtime */
+	switch (reg) {
+	case CC2420_FSMSTATE:
+	/* use them in spi_async and regmap so it's volatile */
+		return true;
+	default:
+		return false;
+	}
+}
+
+static bool
+cc2420_reg_precious(struct device *dev, unsigned int reg)
+{
+	/* don't clear irq line on read */
+	switch (reg) {
+	case CC2420_FSMSTATE:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static const struct regmap_config cc2420_reg_regmap = {
+	.name			= "cc2420_reg",
+	.reg_bits		= 8,
+	.val_bits		= 16,
+	.write_flag_mask	= REG_WRITE_MSK,
+	.read_flag_mask		= REG_READ_MSK,
+	.cache_type		= REGCACHE_RBTREE,
+	.writeable_reg		= cc2420_reg_writeable,
+	.readable_reg		= cc2420_reg_readable,
+	.volatile_reg		= cc2420_reg_volatile,
+	.precious_reg		= cc2420_reg_precious,
+	.fast_io		= true,
+	.can_multi_write	= true,
 };
 
 static int cc2420_get_status(struct cc2420_local *lp, u8 *status)
@@ -178,6 +301,20 @@ static int cc2420_read_16_bit_reg(struct cc2420_local *lp,
 	return ret;
 }
 
+static inline int
+cc2420_read_subreg(struct cc2420_local *lp,
+		      unsigned int addr, unsigned int mask,
+		      unsigned int shift, unsigned int *data)
+{
+	int ret;
+
+	ret = regmap_read(lp->regmap, addr, data);
+	if (!ret)
+		*data = (*data & mask) >> shift;
+
+	return ret;
+}
+
 static int cc2420_write_16_bit_reg_partial(struct cc2420_local *lp,
 					   u8 addr, u16 data, u16 mask)
 {
@@ -220,6 +357,18 @@ static int cc2420_write_16_bit_reg_partial(struct cc2420_local *lp,
 
 err_ret:
 	mutex_unlock(&lp->buffer_mutex);
+	return ret;
+}
+
+static inline int
+cc2420_write_subreg(struct cc2420_local *lp,
+		       unsigned int addr, unsigned int mask,
+		       unsigned int shift, unsigned int data)
+{
+	int ret;
+
+	ret = regmap_update_bits(lp->regmap, addr, mask, data << shift);
+
 	return ret;
 }
 
@@ -503,6 +652,25 @@ cc2420_set_hw_addr_filt(struct ieee802154_hw *dev,
 	return 0;
 }
 
+#define CC2420_MAX_TX_POWERS 0x7
+static const s32 cc2420_powers[CC2420_MAX_TX_POWERS + 1] = {
+	0, -100, -300, -500, -700, -1000, -1500, -2500,
+};
+
+static int
+cc2420_set_txpower(struct ieee802154_hw *hw, s32 mbm)
+{
+	struct cc2420_local *lp = hw->priv;
+	u32 i;
+
+	for (i = 0; i < lp->hw->phy->supported.tx_powers_size; i++) {
+		if (lp->hw->phy->supported.tx_powers[i] == mbm)
+			return cc2420_write_subreg(lp, SG_PA_LVL, 0x1f - 4 * i);
+	}
+
+	return -EINVAL;
+}
+
 static int cc2420_ed(struct ieee802154_hw *dev, u8 *level)
 {
 	struct cc2420_local *lp = dev->priv;
@@ -541,7 +709,7 @@ static struct ieee802154_ops cc2420_ops = {
 	.stop = cc2420_stop,
 	.set_channel = cc2420_set_channel,
 	.set_hw_addr_filt = cc2420_set_hw_addr_filt,
-//	.set_txpower	= cc2420_set_txpower, // TODO
+	.set_txpower	= cc2420_set_txpower, // TODO
 //	.set_promiscuous_mode	= cc2420_set_promiscuous_mode, // TODO
 };
 
@@ -564,6 +732,10 @@ static int cc2420_register(struct cc2420_local *lp)
 //	| IEEE802154_HW_PROMISCUOUS
 
 	lp->hw->phy->flags = WPAN_PHY_FLAG_TXPOWER;
+
+	lp->hw->phy->supported.tx_powers = cc2420_powers;
+	lp->hw->phy->supported.tx_powers_size = ARRAY_SIZE(cc2420_powers);
+	lp->hw->phy->transmit_power = lp->hw->phy->supported.tx_powers[0];
 
 	lp->hw->phy->current_page = 0;
 	lp->hw->phy->current_channel = 11;
@@ -704,6 +876,7 @@ static int cc2420_probe(struct spi_device *spi)
 {
 	struct cc2420_local *lp;
 	struct cc2420_platform_data pdata;
+	unsigned int manid, version, partnum;
 	int ret;
 
 	dev_info(&spi->dev, "%s\n", __func__);
@@ -804,6 +977,36 @@ static int cc2420_probe(struct spi_device *spi)
 
 	gpio_set_value(pdata.reset, HIGH);
 	usleep_range(200, 250);
+
+	/* setup regmap */
+	lp->regmap = devm_regmap_init_spi(spi, &cc2420_reg_regmap);
+	if (IS_ERR(lp->regmap)) {
+		ret = PTR_ERR(lp->regmap);
+		dev_err(&spi->dev, "Failed to allocate dar map: %d\n",
+			ret);
+		goto err_hw_init;
+	}
+
+	/* Check this is actually a cc2420 */
+	ret = cc2420_read_subreg(lp, SR_MANFID, &manid);
+	if (ret)
+		goto err_hw_init;
+	ret = cc2420_read_subreg(lp, SR_PARTNUM, &partnum);
+	if (ret)
+		goto err_hw_init;
+
+	ret = cc2420_read_subreg(lp, SR_VERSION, &version);
+	if (ret)
+		goto err_hw_init;
+
+	if (manid != CC2420_MANFID || version != CC2420_VERSION) {
+		dev_warn(&spi->dev, "Incorrect manufacturer id or version:"
+				    "%x, %x\n", manid, version);
+	}
+
+	dev_info(&lp->spi->dev, "Found Chipcon CC2420\n");
+	dev_info(&lp->spi->dev, "Manufacturer ID:%x Version:%x Partnum:%x\n",
+		   manid, version, partnum);
 
 	ret = cc2420_hw_init(lp);
 	if (ret)
