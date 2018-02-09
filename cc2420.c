@@ -51,7 +51,7 @@
 #define CC2420_FSMSTATE_MASK	0x2F
 
 #define CC2420_MANFIDLOW 	0x233D
-#define CC2420_MANFIDHIGH 	0x3000 /* my chip appears to version 3 - broaden this with testing */
+#define CC2420_MANFIDHIGH 	0x3000
 
 #define SPI_COMMAND_BUFFER	3
 #define	HIGH			1
@@ -110,12 +110,12 @@ static int cc2420_get_status(struct cc2420_local *lp, u8 *status)
 
 	mutex_lock(&lp->buffer_mutex);
 	lp->buf[xfer.len++] = CC2420_WRITEREG(CC2420_SNOP);
-	dev_vdbg(&lp->spi->dev, "get status command buf[0] = %02x\n", lp->buf[0]);
+//	dev_dbg(&lp->spi->dev, "get status command buf[0] = %02x\n", lp->buf[0]);
 
 	ret = spi_sync(lp->spi, &msg);
 	if (!ret)
 		*status = lp->buf[0];
-	dev_dbg(&lp->spi->dev, "status = %02x\n", lp->buf[0]);
+//	dev_dbg(&lp->spi->dev, "status = %02x\n", lp->buf[0]);
 	mutex_unlock(&lp->buffer_mutex);
 
 	return ret;
@@ -138,12 +138,12 @@ static int cc2420_cmd_strobe(struct cc2420_local *lp,
 
 	mutex_lock(&lp->buffer_mutex);
 	lp->buf[xfer.len++] = CC2420_WRITEREG(cmd);
-	dev_vdbg(&lp->spi->dev, "cmd strobe buf[0] = %02x\n", lp->buf[0]);
+	dev_dbg(&lp->spi->dev, "cmd strobe buf[0] = %02x\n", lp->buf[0]);
 
 	ret = spi_sync(lp->spi, &msg);
 	if (!ret)
 		status = lp->buf[0];
-	dev_vdbg(&lp->spi->dev, "status = %02x\n", lp->buf[0]);
+	dev_dbg(&lp->spi->dev, "status = %02x\n", lp->buf[0]);
 	mutex_unlock(&lp->buffer_mutex);
 
 	return ret;
@@ -165,7 +165,7 @@ static int cc2420_read_16_bit_reg(struct cc2420_local *lp,
 
 	mutex_lock(&lp->buffer_mutex);
 	lp->buf[0] = CC2420_READREG(addr);
-	dev_vdbg(&lp->spi->dev, "readreg addr buf[0] = %02x\n", lp->buf[0]);
+	dev_dbg(&lp->spi->dev, "readreg addr buf[0] = %02x\n", lp->buf[0]);
 
 	ret = spi_sync(lp->spi, &msg);
 	dev_dbg(&lp->spi->dev, "status = %d\n", ret);
@@ -194,7 +194,7 @@ static int cc2420_write_16_bit_reg_partial(struct cc2420_local *lp,
 	spi_message_add_tail(&xfer, &msg);
 	mutex_lock(&lp->buffer_mutex);
 	lp->buf[0] = CC2420_READREG(addr);
-	dev_vdbg(&lp->spi->dev, "read addr buf[0] = %02x\n", lp->buf[0]);
+	dev_dbg(&lp->spi->dev, "read addr buf[0] = %02x\n", lp->buf[0]);
 	ret = spi_sync(lp->spi, &msg);
 	if (ret)
 		goto err_ret;
@@ -208,7 +208,7 @@ static int cc2420_write_16_bit_reg_partial(struct cc2420_local *lp,
 	lp->buf[2] &= ~(mask & 0xFF);
 	lp->buf[1] |= (mask >> 8) & (data >> 8);
 	lp->buf[2] |= (mask & 0xFF) & (data & 0xFF);
-	dev_vdbg(&lp->spi->dev, "writereg addr buf[0] = %02x\n", lp->buf[0]);
+	dev_dbg(&lp->spi->dev, "writereg addr buf[0] = %02x\n", lp->buf[0]);
 	dev_dbg(&lp->spi->dev, "buf[1] = %02x\n", lp->buf[1]);
 	dev_dbg(&lp->spi->dev, "buf[2] = %02x\n", lp->buf[2]);
 	ret = spi_sync(lp->spi, &msg);
@@ -297,7 +297,7 @@ static int cc2420_write_txfifo(struct cc2420_local *lp, u8 *data, u8 len)
 
 	mutex_lock(&lp->buffer_mutex);
 	lp->buf[0] = CC2420_WRITEREG(CC2420_TXFIFO);
-	dev_vdbg(&lp->spi->dev, "TX_FIFO addr buf[0] = %02x\n", lp->buf[0]);
+	dev_dbg(&lp->spi->dev, "TX_FIFO addr buf[0] = %02x\n", lp->buf[0]);
 
 	spi_message_init(&msg);
 	spi_message_add_tail(&xfer_head, &msg);
@@ -305,11 +305,11 @@ static int cc2420_write_txfifo(struct cc2420_local *lp, u8 *data, u8 len)
 	spi_message_add_tail(&xfer_buf, &msg);
 
 	status = spi_sync(lp->spi, &msg);
-	dev_vdbg(&lp->spi->dev, "status = %d\n", status);
+	dev_dbg(&lp->spi->dev, "status = %d\n", status);
 	if (msg.status)
 		status = msg.status;
-	dev_vdbg(&lp->spi->dev, "status = %d\n", status);
-	dev_vdbg(&lp->spi->dev, "buf[0] = %02x\n", lp->buf[0]);
+	dev_dbg(&lp->spi->dev, "status = %d\n", status);
+	dev_dbg(&lp->spi->dev, "buf[0] = %02x\n", lp->buf[0]);
 
 	mutex_unlock(&lp->buffer_mutex);
 	return status;
@@ -333,19 +333,19 @@ cc2420_read_rxfifo(struct cc2420_local *lp, u8 *data, u8 *len, u8 *lqi)
 	mutex_lock(&lp->buffer_mutex);
 	lp->buf[0] = CC2420_READREG(CC2420_RXFIFO);
 	lp->buf[1] = 0x00;
-	dev_vdbg(&lp->spi->dev, "read rxfifo buf[0] = %02x\n", lp->buf[0]);
-	dev_vdbg(&lp->spi->dev, "buf[1] = %02x\n", lp->buf[1]);
+	dev_dbg(&lp->spi->dev, "read rxfifo buf[0] = %02x\n", lp->buf[0]);
+	dev_dbg(&lp->spi->dev, "buf[1] = %02x\n", lp->buf[1]);
 	spi_message_init(&msg);
 	spi_message_add_tail(&xfer_head, &msg);
 	spi_message_add_tail(&xfer_buf, &msg);
 
 	status = spi_sync(lp->spi, &msg);
-	dev_vdbg(&lp->spi->dev, "status = %d\n", status);
+	dev_dbg(&lp->spi->dev, "status = %d\n", status);
 	if (msg.status)
 		status = msg.status;
-	dev_vdbg(&lp->spi->dev, "status = %d\n", status);
-	dev_vdbg(&lp->spi->dev, "return status buf[0] = %02x\n", lp->buf[0]);
-	dev_vdbg(&lp->spi->dev, "length buf[1] = %02x\n", lp->buf[1]);
+	dev_dbg(&lp->spi->dev, "status = %d\n", status);
+	dev_dbg(&lp->spi->dev, "return status buf[0] = %02x\n", lp->buf[0]);
+	dev_dbg(&lp->spi->dev, "length buf[1] = %02x\n", lp->buf[1]);
 
 	*lqi = data[lp->buf[1] - 1] & 0x7f;
 	*len = lp->buf[1]; /* it should be less than 130 */
@@ -488,7 +488,7 @@ cc2420_set_hw_addr_filt(struct ieee802154_hw *dev,
 	}
 
 	if (changed & IEEE802154_AFILT_PANC_CHANGED) {
-		dev_vdbg(&lp->spi->dev,
+		dev_dbg(&lp->spi->dev,
 			 "%s called for panc change\n", __func__);
 
 		cc2420_read_16_bit_reg(lp, CC2420_MDMCTRL0, &reg);
@@ -521,6 +521,9 @@ static int cc2420_ed(struct ieee802154_hw *dev, u8 *level)
 
 static int cc2420_start(struct ieee802154_hw *dev)
 {
+	struct cc2420_local *lp = dev->priv;
+
+	dev_dbg(printdev(lp), "%s\n", __func__);
 	return cc2420_cmd_strobe(dev->priv, CC2420_SRXON);
 }
 
@@ -545,22 +548,25 @@ static struct ieee802154_ops cc2420_ops = {
 static int cc2420_register(struct cc2420_local *lp)
 {
 	int ret = -ENOMEM;
+
 	lp->hw = ieee802154_alloc_hw(sizeof(*lp), &cc2420_ops);
 	if (!lp->hw)
 		goto err_ret;
 
 	lp->hw->priv = lp;
 	lp->hw->parent = &lp->spi->dev;
-	//look this up.
 	lp->hw->extra_tx_headroom = 0;
-	//and this
-	//lp->dev->channel_mask = 0x7ff;
-	//and more.
+	ieee802154_random_extended_addr(&lp->hw->phy->perm_extended_addr);
 
 	/* We do support only 2.4 Ghz */
 	lp->hw->phy->supported.channels[0] = 0x7FFF800;
 	lp->hw->flags = IEEE802154_HW_OMIT_CKSUM | IEEE802154_HW_AFILT;
 //	| IEEE802154_HW_PROMISCUOUS
+
+	lp->hw->phy->flags = WPAN_PHY_FLAG_TXPOWER;
+
+	lp->hw->phy->current_page = 0;
+	lp->hw->phy->current_channel = 11;
 
 	dev_dbg(&lp->spi->dev, "registered cc2420\n");
 	ret = ieee802154_register_hw(lp->hw);
@@ -624,6 +630,8 @@ static int cc2420_get_platform_data(struct spi_device *spi,
 	struct device_node *np = spi->dev.of_node;
 	struct cc2420_local *lp = spi_get_drvdata(spi);
 
+	dev_dbg(&spi->dev, "%s\n", __func__);
+
 	if (!np) {
 		struct cc2420_platform_data *spi_pdata = spi->dev.platform_data;
 
@@ -636,13 +644,22 @@ static int cc2420_get_platform_data(struct spi_device *spi,
 
 	pdata->fifo = of_get_named_gpio(np, "fifo-gpio", 0);
 	lp->fifo_pin = pdata->fifo;
+	dev_dbg(&spi->dev, "get fifo-gpio: %d\n", pdata->fifo);
 
 	pdata->fifop = of_get_named_gpio(np, "fifop-gpio", 0);
+	dev_dbg(&spi->dev, "get fifop-gpio: %d\n", pdata->fifop);
 
 	pdata->sfd = of_get_named_gpio(np, "sfd-gpio", 0);
+	dev_dbg(&spi->dev, "get sfd-gpio: %d\n", pdata->sfd);
+
 	pdata->cca = of_get_named_gpio(np, "cca-gpio", 0);
+	dev_dbg(&spi->dev, "get cca-gpio: %d\n", pdata->cca);
+
 	pdata->vreg = of_get_named_gpio(np, "vreg-gpio", 0);
+	dev_dbg(&spi->dev, "get vreg-gpio: %d\n", pdata->vreg);
+
 	pdata->reset = of_get_named_gpio(np, "reset-gpio", 0);
+	dev_dbg(&spi->dev, "get reset-gpio: %d\n", pdata->reset);
 
 	return 0;
 }
@@ -688,6 +705,8 @@ static int cc2420_probe(struct spi_device *spi)
 	struct cc2420_local *lp;
 	struct cc2420_platform_data pdata;
 	int ret;
+
+	dev_info(&spi->dev, "%s\n", __func__);
 
 	lp = devm_kzalloc(&spi->dev, sizeof(*lp), GFP_KERNEL);
 	if (!lp)
@@ -829,6 +848,8 @@ err_hw_init:
 static int cc2420_remove(struct spi_device *spi)
 {
 	struct cc2420_local *lp = spi_get_drvdata(spi);
+
+	dev_info(printdev(lp), "%s\n", __func__);
 
 	mutex_destroy(&lp->buffer_mutex);
 	flush_work(&lp->fifop_irqwork);
