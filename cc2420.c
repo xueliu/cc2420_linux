@@ -1088,7 +1088,7 @@ static irqreturn_t cc2420_fifop_isr(int irq, void *data)
 
 //	BUG_ON(lp->is_tx);
 
-//	if (gpio_get_value(lp->fifo_pin)) {
+	if (gpio_get_value(lp->fifo_pin)) {
 		/* read length of received packet */
 		lp->reg_addr[0] = CC2420_READREG(CC2420_RXFIFO);
 		lp->reg_msg.complete = cc2420_handle_read_len_complete;
@@ -1098,15 +1098,15 @@ static irqreturn_t cc2420_fifop_isr(int irq, void *data)
 			enable_irq(irq);
 			return IRQ_NONE;
 		}
-//	} else {
-//		dev_err(&lp->spi->dev, "rxfifo overflow\n");
-//		lp->reg_addr[0] = CC2420_SFLUSHRX;
-//		lp->reg_val[0] = CC2420_SFLUSHRX; /* send twice */
-//		lp->reg_msg.complete = cc2420_handle_flush_rxfifo_complete;
-//		ret = spi_async(lp->spi, &lp->reg_msg);
-//		if (ret)
-//			dev_err(printdev(lp), "failed to send flush command\n");
-//	}
+	} else {
+		dev_err(&lp->spi->dev, "rxfifo overflow\n");
+		lp->reg_addr[0] = CC2420_SFLUSHRX;
+		lp->reg_val[0] = CC2420_SFLUSHRX; /* send twice */
+		lp->reg_msg.complete = cc2420_handle_flush_rxfifo_complete;
+		ret = spi_async(lp->spi, &lp->reg_msg);
+		if (ret)
+			dev_err(printdev(lp), "failed to send flush command\n");
+	}
 
 	return IRQ_HANDLED;
 }
