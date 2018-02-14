@@ -49,8 +49,13 @@ struct cc2420_platform_data {
 
 /* Control registers */
 #define CC2420_MAIN            0x10
-#define CC2420_MDMCTRL0        0x11
-#define CC2420_MDMCTRL1        0x12
+#define RG_MDMCTRL0	(0x11)
+#define SG_PAN_COORDINATOR	0x11, 0x1000, 12
+#define SG_ADR_DECODE		0x11, 0x0800, 11
+#define SG_CCA_MODE		0x11, 0x00C0, 6
+#define SG_AUTOCRC		0x11, 0x0020, 5
+#define SG_AUTOACK		0x11, 0x0010, 4
+#define RG_MDMCTRL1	(0x12)
 #define CC2420_RSSI            0x13
 #define CC2420_SYNCWORD        0x14
 #define RG_TXCTRL	(0x15)
@@ -62,7 +67,13 @@ struct cc2420_platform_data {
 #define CC2420_SECCTRL0        0x19
 #define CC2420_SECCTRL1        0x1A
 #define CC2420_BATTMON         0x1B
-#define CC2420_IOCFG0          0x1C
+#define RG_IOCFG0	(0x1C)
+#define SG_BCN_ACCEPT		0x1C, 0x0800, 11
+#define SG_FIFO_POLARITY	0x1C, 0x0400, 10
+#define SG_FIFOP_POLARITY	0x1C, 0x0200, 9
+#define SG_SFG_POLARITY		0x1C, 0x0100, 8
+#define SG_CCA_POLARITY		0x1C, 0x0080, 7
+#define SG_FIFOP_THR		0x1C, 0x007F, 0
 #define CC2420_IOCFG1          0x1D
 #define RG_MANFIDL	(0x1e)
 #define	SR_MANFID		0x1e, 0x0fff, 0
@@ -81,7 +92,8 @@ struct cc2420_platform_data {
 #define CC2420_FSTST2          0x29
 #define CC2420_FSTST3          0x2A
 #define CC2420_RXBPFTST        0x2B
-#define CC2420_FSMSTATE        0x2C /* lowest 6 bytes give current state */
+#define RG_FSMSTATE	(0x2C)
+#define SG_FSM_CUR_STATE	0x2C, 0x003F, 0
 #define CC2420_ADCTST          0x2D
 #define CC2420_DACTST          0x2E
 #define CC2420_TOPTST          0x2F
