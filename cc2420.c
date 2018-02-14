@@ -762,14 +762,11 @@ cc2420_xmit(struct ieee802154_hw *hw, struct sk_buff *skb)
 
 	dev_dbg(printdev(lp), "%s\n", __func__);
 
-//#ifdef DEBUG
-//	print_hex_dump(KERN_INFO, "cc2420 txfifo: ", DUMP_PREFIX_OFFSET, 16, 1,
-//		       skb->data, skb->len, 0);
-//#endif
-//	lp->is_tx = 1;
-//	enable_irq(lp->sfd_irq);
+#ifdef DEBUG
+	print_hex_dump(KERN_INFO, "cc2420 txfifo: ", DUMP_PREFIX_OFFSET, 16, 1,
+		       skb->data, skb->len, 0);
+#endif
 
-//	BUG_ON(lp->is_tx);
 	lp->tx_skb = skb;
 
 	lp->txfifo_addr[0] = CC2420_WRITEREG(CC2420_TXFIFO);
@@ -783,43 +780,6 @@ cc2420_xmit(struct ieee802154_hw *hw, struct sk_buff *skb)
 
 	return spi_async(lp->spi, &lp->txfifo_msg);
 }
-
-//static int cc2420_rx(struct cc2420_local *lp)
-//{
-//	u8 len = 128;
-//	u8 lqi = 0; /* link quality */
-//	u8 fcs = 0;
-//	int rc;
-//	struct sk_buff *skb;
-//
-//	skb = alloc_skb(len, GFP_KERNEL);
-//	if (!skb)
-//		return -ENOMEM;
-//
-//	rc = cc2420_read_rxfifo(lp, skb_put(skb, len), &len, &lqi);
-//	if (len < 2) {
-//		kfree_skb(skb);
-//		return -EINVAL;
-//	}
-//
-//	/* Check FCS flag */
-//	fcs = skb->data[len-1];
-//	if (!(fcs >> 7)) {
-//		dev_dbg(&lp->spi->dev, "Received packet with wrong FCS; ingnore.\n");
-//		kfree_skb(skb);
-//		return -EINVAL;
-//	}
-//
-//	/* Clip last two bytes. When using hardware FCS they get replaced with
-//	 * correlation value, FCS flag and RSSI value */
-//	skb_trim(skb, len-2);
-//
-//	ieee802154_rx_irqsafe(lp->hw, skb, lqi);
-//
-//	dev_dbg(&lp->spi->dev, "RXFIFO: %d %d %x\n", rc, len, lqi);
-//
-//	return 0;
-//}
 
 static int cc2420_set_channel(struct ieee802154_hw *hw, u8 page, u8 channel)
 {
@@ -952,7 +912,6 @@ static void cc2420_stop(struct ieee802154_hw *dev)
 
 static struct ieee802154_ops cc2420_ops = {
 	.owner = THIS_MODULE,
-//	.xmit_sync = cc2420_tx,
 	.xmit_async = cc2420_xmit,
 	.ed = cc2420_ed,
 	.start = cc2420_start,
@@ -1002,17 +961,6 @@ err_ret:
 	return ret;
 }
 
-//static void
-//cc2420_handle_flush_rxfifo_complete(void *context)
-//{
-//	struct cc2420_local *lp = context;
-//
-//	dev_dbg(printdev(lp), "%s\n", __func__);
-//
-////	enable_irq(lp->sfd_irq);
-////	enable_irq(lp->fifop_irq);
-//}
-
 static void
 cc2420_handle_read_rxfifo_complete(void *context)
 {
@@ -1022,7 +970,7 @@ cc2420_handle_read_rxfifo_complete(void *context)
 	u8 len = lp->rxfifo_xfer_buf.len;
 	u8 lqi = lp->rxfifo_buf[len - 1] & 0x7f;
 
-//	dev_dbg(printdev(lp), "%s\n", __func__);
+	dev_dbg(printdev(lp), "%s\n", __func__);
 
 	if (!ieee802154_is_valid_psdu_len(len)) {
 		dev_dbg(&lp->spi->dev, "corrupted frame received\n");
@@ -1038,11 +986,11 @@ cc2420_handle_read_rxfifo_complete(void *context)
 	memcpy(skb_put(skb, len), lp->rxfifo_buf, len);
 	ieee802154_rx_irqsafe(lp->hw, skb, lqi);
 
-//#ifdef DEBUG
-//	print_hex_dump(KERN_INFO, "cc2420 rxfifo: ", DUMP_PREFIX_OFFSET, 16, 1,
-//		       lp->rxfifo_buf, len, 0);
-//	pr_info("cc2420 rx: lqi: %02hhx\n", lqi);
-//#endif
+#ifdef DEBUG
+	print_hex_dump(KERN_INFO, "cc2420 rxfifo: ", DUMP_PREFIX_OFFSET, 16, 1,
+		       lp->rxfifo_buf, len, 0);
+	pr_info("cc2420 rx: lqi: %02hhx\n", lqi);
+#endif
 
 	lp->reg_addr[0] = CC2420_SFLUSHRX;
 	lp->reg_val[0] = CC2420_SFLUSHRX; /* send twice */
@@ -1111,22 +1059,6 @@ static irqreturn_t cc2420_fifop_isr(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-//static void cc2420_fifop_irqwork(struct work_struct *work)
-//{
-//	struct cc2420_local *lp
-//		= container_of(work, struct cc2420_local, fifop_irqwork);
-//
-//	dev_dbg(&lp->spi->dev, "fifop interrupt received\n");
-//
-//	if (gpio_get_value(lp->fifo_pin))
-//		cc2420_rx(lp);
-//	else
-//		dev_err(&lp->spi->dev, "rxfifo overflow\n");
-//
-//	cc2420_cmd_strobe(lp, CC2420_SFLUSHRX);
-//	cc2420_cmd_strobe(lp, CC2420_SFLUSHRX);
-//}
-
 static irqreturn_t cc2420_sfd_isr(int irq, void *data)
 {
 	struct cc2420_local *lp = data;
@@ -1135,13 +1067,10 @@ static irqreturn_t cc2420_sfd_isr(int irq, void *data)
 
 	disable_irq_nosync(irq);
 	if (lp->is_tx) {
-//		lp->is_tx = 0;
-//		spin_unlock_irqrestore(&lp->lock, flags);
 		dev_dbg(&lp->spi->dev, "SFD for TX done\n");
 		lp->is_tx = 0;
 
 		ieee802154_xmit_complete(lp->hw, lp->tx_skb, false);
-//		enable_irq(irq);
 		/* start RX */
 //		lp->cmd_val[0] = CC2420_WRITEREG(CC2420_SFLUSHTX);
 //		lp->cmd_msg.complete = cc2420_handle_flush_txfifo_complete;
@@ -1152,10 +1081,7 @@ static irqreturn_t cc2420_sfd_isr(int irq, void *data)
 			enable_irq(irq);
 			return IRQ_NONE;
 		}
-
-//		complete(&lp->tx_complete);
 	} else {
-//		spin_unlock_irqrestore(&lp->lock, flags);
 		enable_irq(irq);
 		dev_dbg(&lp->spi->dev, "SFD for RX\n");
 	}
@@ -1340,9 +1266,7 @@ static int cc2420_probe(struct spi_device *spi)
 		return -ENOMEM;
 
 	mutex_init(&lp->buffer_mutex);
-//	INIT_WORK(&lp->fifop_irqwork, cc2420_fifop_irqwork);
 	spin_lock_init(&lp->lock);
-//	init_completion(&lp->tx_complete);
 
 	/* Request all the gpio's */
 	if (!gpio_is_valid(pdata.fifo)) {
@@ -1495,7 +1419,6 @@ static int cc2420_probe(struct spi_device *spi)
 
 err_hw_init:
 	mutex_destroy(&lp->buffer_mutex);
-//	flush_work(&lp->fifop_irqwork);
 	return ret;
 }
 
@@ -1506,7 +1429,6 @@ static int cc2420_remove(struct spi_device *spi)
 	dev_info(printdev(lp), "%s\n", __func__);
 
 	mutex_destroy(&lp->buffer_mutex);
-//	flush_work(&lp->fifop_irqwork);
 
 	ieee802154_unregister_hw(lp->hw);
 	ieee802154_free_hw(lp->hw);
