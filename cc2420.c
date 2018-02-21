@@ -328,12 +328,12 @@ static int cc2420_cmd_strobe(struct cc2420_local *lp,
 
 	mutex_lock(&lp->buffer_mutex);
 	lp->buf[xfer.len++] = CC2420_WRITEREG(cmd);
-	dev_dbg(&lp->spi->dev, "cmd strobe buf[0] = %02x\n", lp->buf[0]);
+//	dev_dbg(&lp->spi->dev, "cmd strobe buf[0] = %02x\n", lp->buf[0]);
 
 	ret = spi_sync(lp->spi, &msg);
 	if (!ret)
 		status = lp->buf[0];
-	dev_dbg(&lp->spi->dev, "status = %02x\n", lp->buf[0]);
+//	dev_dbg(&lp->spi->dev, "status = %02x\n", lp->buf[0]);
 	mutex_unlock(&lp->buffer_mutex);
 
 	return ret;
@@ -1007,7 +1007,7 @@ cc2420_handle_read_len_complete(void *context)
 	u8 len;
 	int ret;
 
-//	dev_dbg(printdev(lp), "%s\n", __func__);
+	dev_dbg(printdev(lp), "%s\n", __func__);
 
 	enable_irq(lp->fifop_irq);
 
