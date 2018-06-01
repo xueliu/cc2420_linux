@@ -18,6 +18,7 @@
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
 #include <linux/gpio.h>
+#include <linux/irq.h>
 #include <linux/spi/spi.h>
 #include <linux/workqueue.h>
 #include <linux/interrupt.h>
@@ -103,9 +104,7 @@ struct cc2420_local {
 	struct mutex buffer_mutex;	/* SPI buffer mutex */
 	bool is_tx;			/* Flag for sync b/w Tx and Rx */
 	int fifo_pin;			/* FIFO GPIO pin number */
-//	struct work_struct fifop_irqwork;/* Workqueue for FIFOP */
 	spinlock_t lock;		/* Lock for is_tx*/
-//	struct completion tx_complete;	/* Work completion for Tx */
 	bool promiscuous;               /* Flag for promiscuous mode */
 
 	int fifop_irq;
